@@ -8,7 +8,7 @@
     "start": "bun run src/main.ts server",
     "server": "bun run src/main.ts server",
     "setup": "bun run src/main.ts setup",
-    "build:exe": "bun build --compile --minify --bytecode --sourcemap --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/whiscord",
+    "build:exe": "bun run build-exe.ts",
     "lint": "oxlint src",
     "fmt": "oxfmt --write",
     "fmt:check": "oxfmt --check",

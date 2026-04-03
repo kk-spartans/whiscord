@@ -43,6 +43,32 @@ type WhatsAppPairingState = {
   qrTerminal?: string;
 };
 
+type DisconnectLikeError = {
+  output?: {
+    statusCode?: number;
+  };
+  cause?: {
+    output?: {
+      statusCode?: number;
+    };
+    message?: string;
+  };
+  message?: string;
+};
+
+const disconnectReasons = new Set<number>([
+  DisconnectReason.connectionClosed,
+  DisconnectReason.connectionLost,
+  DisconnectReason.connectionReplaced,
+  DisconnectReason.timedOut,
+  DisconnectReason.loggedOut,
+  DisconnectReason.badSession,
+  DisconnectReason.restartRequired,
+  DisconnectReason.multideviceMismatch,
+  DisconnectReason.forbidden,
+  DisconnectReason.unavailableService,
+]);
+
 export async function runSetup(paths: AppPaths): Promise<void> {
   await ensureDataDirectories(paths);
 
@@ -478,77 +504,207 @@ async function fetchWhatsAppGroups(
   onState: (state: WhatsAppPairingState) => void,
 ): Promise<SetupGroup[]> {
   const auth = await useMultiFileAuthState(paths.whatsappAuthDir);
-  const socket = makeWASocket({
-    auth: auth.state,
-    browser: Browsers.macOS("Desktop"),
-    getMessage: async () => undefined,
-    logger: pino({ level: "silent" }),
-    markOnlineOnConnect: false,
-  });
+  let lastCloseSummary: string | undefined;
+  const fatalDisconnectReasons = new Set<DisconnectReason>([
+    DisconnectReason.loggedOut,
+    DisconnectReason.badSession,
+    DisconnectReason.multideviceMismatch,
+    DisconnectReason.forbidden,
+  ]);
 
-  socket.ev.on("creds.update", () => {
-    void auth.saveCreds();
-  });
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    const socket = makeWASocket({
+      auth: auth.state,
+      browser: Browsers.macOS("Desktop"),
+      getMessage: async () => undefined,
+      logger: pino({ level: "silent" }),
+      markOnlineOnConnect: false,
+    });
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const onUpdate = async (update: Partial<ConnectionState>) => {
-        if (update.connection === "connecting") {
-          onState({
-            status: "Connecting to WhatsApp...",
-          });
-        }
+    socket.ev.on("creds.update", () => {
+      void auth.saveCreds();
+    });
 
-        if (update.qr) {
-          onState({
-            status: "QR ready. Scan it from WhatsApp > Linked devices.",
-            qrTerminal: await renderWhatsAppQr(update.qr),
-          });
-        }
-
-        if (update.connection === "open") {
-          onState({
-            status: "WhatsApp connected. Loading your groups...",
-          });
-          resolve();
-          return;
-        }
-
-        if (update.connection === "close") {
-          const statusCode = (
-            update.lastDisconnect?.error as {
-              output?: {
-                statusCode?: number;
-              };
-            }
-          )?.output?.statusCode;
-
-          if (statusCode === DisconnectReason.loggedOut) {
-            reject(
-              new Error("WhatsApp logged out. Delete data/whatsapp-auth and run setup again."),
-            );
+    try {
+      const outcome = await new Promise<"open" | "retry">((resolve, reject) => {
+        let settled = false;
+        const settle = <T extends "open" | "retry">(callback: (value: T) => void, value: T) => {
+          if (settled) {
             return;
           }
 
-          reject(new Error("WhatsApp connection closed before setup completed"));
-        }
-      };
+          settled = true;
+          callback(value);
+        };
 
-      socket.ev.on("connection.update", (update) => {
-        void onUpdate(update);
+        const fail = (error: Error) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          reject(error);
+        };
+
+        const onUpdate = async (update: Partial<ConnectionState>) => {
+          if (update.connection === "connecting") {
+            onState({
+              status: attempt === 1 ? "Connecting to WhatsApp..." : "Reconnecting to WhatsApp...",
+            });
+          }
+
+          if (update.qr) {
+            onState({
+              status: "QR ready. Scan it from WhatsApp > Linked devices.",
+              qrTerminal: await renderWhatsAppQr(update.qr),
+            });
+          }
+
+          if (update.connection === "open") {
+            onState({
+              status: "WhatsApp connected. Loading your groups...",
+            });
+            settle(resolve, "open");
+            return;
+          }
+
+          if (update.connection === "close") {
+            const statusCode = getDisconnectReason(update);
+            lastCloseSummary = getDisconnectSummary(update);
+
+            if (statusCode === DisconnectReason.loggedOut) {
+              fail(
+                new Error("WhatsApp logged out. Delete data/whatsapp-auth and run setup again."),
+              );
+              return;
+            }
+
+            if (statusCode !== undefined && fatalDisconnectReasons.has(statusCode)) {
+              fail(new Error(formatFatalDisconnectMessage(statusCode)));
+              return;
+            }
+
+            settle(resolve, "retry");
+          }
+        };
+
+        socket.ev.on("connection.update", (update) => {
+          void onUpdate(update);
+        });
       });
-    });
 
-    const groups = await socket.groupFetchAllParticipating();
+      if (outcome === "retry") {
+        if (attempt < 6) {
+          onState({
+            status: `WhatsApp asked for a quick reconnect. Retrying... (${attempt}/6)`,
+          });
+          await new Promise((resolve) => {
+            setTimeout(resolve, 500);
+          });
+          continue;
+        }
 
-    return Object.values(groups)
-      .map((group) => ({
-        id: group.id,
-        name: group.subject || group.id,
-        participants: group.participants.length,
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name));
-  } finally {
-    socket.end(undefined);
+        throw new Error(
+          `WhatsApp kept reconnecting during setup. Try scanning the QR again.${lastCloseSummary ? ` Last close: ${lastCloseSummary}` : ""}`,
+        );
+      }
+
+      const groups = await socket.groupFetchAllParticipating();
+
+      return Object.values(groups)
+        .map((group) => ({
+          id: group.id,
+          name: group.subject || group.id,
+          participants: group.participants.length,
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name));
+    } finally {
+      socket.end(undefined);
+    }
   }
+
+  throw new Error("WhatsApp setup failed before groups could be loaded");
+}
+
+function getDisconnectStatusCode(update: Partial<ConnectionState>): number | undefined {
+  const error = parseDisconnectError(update.lastDisconnect?.error);
+
+  return error?.output?.statusCode ?? error?.cause?.output?.statusCode;
+}
+
+function getDisconnectReason(update: Partial<ConnectionState>): DisconnectReason | undefined {
+  const statusCode = getDisconnectStatusCode(update);
+  if (statusCode === undefined || !disconnectReasons.has(statusCode)) {
+    return undefined;
+  }
+
+  return statusCode;
+}
+
+function formatFatalDisconnectMessage(statusCode: DisconnectReason): string {
+  if (statusCode === DisconnectReason.badSession) {
+    return "WhatsApp rejected the saved session. Delete data/whatsapp-auth and run setup again.";
+  }
+
+  if (statusCode === DisconnectReason.multideviceMismatch) {
+    return "WhatsApp multi-device mismatch. Update dependencies and run setup again.";
+  }
+
+  if (statusCode === DisconnectReason.forbidden) {
+    return "WhatsApp blocked this connection attempt (403). Wait a bit and try again.";
+  }
+
+  return `WhatsApp disconnected with status ${statusCode}`;
+}
+
+function getDisconnectSummary(update: Partial<ConnectionState>): string {
+  const statusCode = getDisconnectStatusCode(update);
+  const error = parseDisconnectError(update.lastDisconnect?.error);
+  const message = error?.message ?? error?.cause?.message;
+
+  if (statusCode !== undefined && message) {
+    return `${statusCode} (${message})`;
+  }
+
+  if (statusCode !== undefined) {
+    return String(statusCode);
+  }
+
+  return message ?? "unknown";
+}
+
+function parseDisconnectError(error: unknown): DisconnectLikeError | undefined {
+  if (!isObjectRecord(error)) {
+    return undefined;
+  }
+
+  const output = getOutputStatusCode(error.output);
+  const cause = isObjectRecord(error.cause) ? error.cause : undefined;
+  const causeOutput = getOutputStatusCode(cause?.output);
+  const causeMessage = typeof cause?.message === "string" ? cause.message : undefined;
+  const message = typeof error.message === "string" ? error.message : undefined;
+
+  return {
+    output: output === undefined ? undefined : { statusCode: output },
+    cause:
+      causeOutput === undefined && causeMessage === undefined
+        ? undefined
+        : {
+            output: causeOutput === undefined ? undefined : { statusCode: causeOutput },
+            message: causeMessage,
+          },
+    message,
+  };
+}
+
+function getOutputStatusCode(value: unknown): number | undefined {
+  if (!isObjectRecord(value) || typeof value.statusCode !== "number") {
+    return undefined;
+  }
+
+  return value.statusCode;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

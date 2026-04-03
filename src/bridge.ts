@@ -21,6 +21,17 @@ import type { AppConfig } from "./config";
 import type { EventLevel, RuntimeEvent, RuntimeSnapshot } from "./runtime-state";
 import { renderWhatsAppQr } from "./whatsapp-qr";
 
+type DisconnectLikeError = {
+  output?: {
+    statusCode?: number;
+  };
+  cause?: {
+    output?: {
+      statusCode?: number;
+    };
+  };
+};
+
 type SnapshotListener = (snapshot: RuntimeSnapshot) => void;
 
 export class RuntimeStore {
@@ -271,7 +282,15 @@ export class BridgeService {
         return;
       }
 
-      this.discordChannel = channel as SendableChannels;
+      if (!channel.isSendable()) {
+        this.discordChannel = null;
+        this.store.increment("errors");
+        this.store.log("error", `Discord channel ${channelId} does not allow sending messages`);
+        this.updateBridgeReady();
+        return;
+      }
+
+      this.discordChannel = channel;
 
       const channelName =
         "name" in channel && typeof channel.name === "string" ? channel.name : channel.id;
@@ -379,13 +398,7 @@ export class BridgeService {
     }
 
     this.whatsappSocket = null;
-    const statusCode = (
-      update.lastDisconnect?.error as {
-        output?: {
-          statusCode?: number;
-        };
-      }
-    )?.output?.statusCode;
+    const statusCode = getDisconnectStatusCode(update);
 
     if (statusCode === DisconnectReason.loggedOut) {
       this.store.setWhatsApp({ status: "error" });
@@ -668,6 +681,44 @@ export class BridgeService {
 
     this.store.setBridge({ ready: discordReady && whatsappReady });
   }
+}
+
+function getDisconnectStatusCode(update: Partial<ConnectionState>): number | undefined {
+  const error = parseDisconnectError(update.lastDisconnect?.error);
+
+  return error?.output?.statusCode ?? error?.cause?.output?.statusCode;
+}
+
+function parseDisconnectError(error: unknown): DisconnectLikeError | undefined {
+  if (!isObjectRecord(error)) {
+    return undefined;
+  }
+
+  const output = getOutputStatusCode(error.output);
+  const cause = isObjectRecord(error.cause) ? error.cause : undefined;
+  const causeOutput = getOutputStatusCode(cause?.output);
+
+  return {
+    output: output === undefined ? undefined : { statusCode: output },
+    cause:
+      causeOutput === undefined
+        ? undefined
+        : {
+            output: { statusCode: causeOutput },
+          },
+  };
+}
+
+function getOutputStatusCode(value: unknown): number | undefined {
+  if (!isObjectRecord(value) || typeof value.statusCode !== "number") {
+    return undefined;
+  }
+
+  return value.statusCode;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function splitLabeledMessage(

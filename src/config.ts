@@ -11,6 +11,107 @@ const trim = (value: string | undefined) => {
   return trimmed ? trimmed : undefined;
 };
 
+const serviceStatuses = new Set<string>([
+  "disabled",
+  "idle",
+  "connecting",
+  "connected",
+  "closed",
+  "error",
+]);
+
+const eventLevels = new Set<string>(["info", "warn", "error"]);
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function getNodeErrorCode(error: unknown): string | undefined {
+  if (!isObjectRecord(error)) {
+    return undefined;
+  }
+
+  return typeof error.code === "string" ? error.code : undefined;
+}
+
+function isRuntimeSnapshot(value: unknown): value is RuntimeSnapshot {
+  if (!isObjectRecord(value) || !isNumber(value.startedAt) || !Array.isArray(value.events)) {
+    return false;
+  }
+
+  const config = value.config;
+  const bridge = value.bridge;
+  const discord = value.discord;
+  const whatsapp = value.whatsapp;
+
+  if (
+    !isObjectRecord(config) ||
+    !isStringArray(config.issues) ||
+    !isStringArray(config.bridgeBlockers) ||
+    typeof config.dataDir !== "string"
+  ) {
+    return false;
+  }
+
+  if (
+    !isObjectRecord(bridge) ||
+    typeof bridge.ready !== "boolean" ||
+    !isNumber(bridge.discordToWhatsApp) ||
+    !isNumber(bridge.whatsAppToDiscord) ||
+    !isNumber(bridge.ignored) ||
+    !isNumber(bridge.errors)
+  ) {
+    return false;
+  }
+
+  if (
+    !isObjectRecord(discord) ||
+    typeof discord.status !== "string" ||
+    !serviceStatuses.has(discord.status) ||
+    !isNumber(discord.guildCount)
+  ) {
+    return false;
+  }
+
+  if (
+    !isObjectRecord(whatsapp) ||
+    typeof whatsapp.status !== "string" ||
+    !serviceStatuses.has(whatsapp.status) ||
+    !Array.isArray(whatsapp.groups)
+  ) {
+    return false;
+  }
+
+  if (
+    !whatsapp.groups.every(
+      (group) =>
+        isObjectRecord(group) &&
+        typeof group.id === "string" &&
+        typeof group.name === "string" &&
+        isNumber(group.participants),
+    )
+  ) {
+    return false;
+  }
+
+  return value.events.every(
+    (event) =>
+      isObjectRecord(event) &&
+      isNumber(event.at) &&
+      typeof event.level === "string" &&
+      eventLevels.has(event.level) &&
+      typeof event.message === "string",
+  );
+}
+
 const configFileSchema = z.object({
   discord: z.object({
     token: z.string().min(1),
@@ -112,7 +213,7 @@ export async function loadConfig(paths = getAppPaths()): Promise<AppConfig> {
       issues.push(`Config file is invalid: ${parsed.error.issues[0]?.message ?? "bad shape"}`);
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    if (getNodeErrorCode(error) !== "ENOENT") {
       const message = error instanceof Error ? error.message : String(error);
       issues.push(`Failed to read config file: ${message}`);
     }
@@ -177,7 +278,8 @@ export async function writeRuntimeSnapshot(
 export async function readRuntimeSnapshot(paths: AppPaths): Promise<RuntimeSnapshot | null> {
   try {
     const file = await readFile(paths.statusFile, "utf8");
-    return JSON.parse(file) as RuntimeSnapshot;
+    const parsed: unknown = JSON.parse(file);
+    return isRuntimeSnapshot(parsed) ? parsed : null;
   } catch {
     return null;
   }

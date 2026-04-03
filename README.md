@@ -64,5 +64,5 @@ pnpm run server
 pnpm run build:exe
 pnpm run fmt
 pnpm run lint
-pnpm run typecheck
+pnpm run lint:type-aware
 ```

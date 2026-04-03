@@ -2,7 +2,7 @@ import { getAppPaths } from "./config";
 import { runServer } from "./server";
 import { runSetup } from "./setup";
 
-const mode = Bun.argv[2] ?? "server";
+const mode = process.argv[2] ?? "server";
 const paths = getAppPaths();
 
 void main().catch((error) => {

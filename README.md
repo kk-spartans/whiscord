@@ -14,8 +14,8 @@ Headless bridge for one Discord channel and one WhatsApp group.
 ## Setup
 
 ```bash
-bun install
-bun run setup
+pnpm install
+pnpm run setup
 ```
 
 The setup wizard asks for:
@@ -30,7 +30,7 @@ It writes the config to `~/.local/share/whiscord/config.json` and keeps WhatsApp
 ## Run
 
 ```bash
-bun run server
+pnpm run server
 ```
 
 ## Notes
@@ -45,24 +45,24 @@ bun run server
 Current platform:
 
 ```bash
-bun run build:exe
+pnpm run build:exe
 ```
 
-Cross-compile example:
+Native build example with a custom output path:
 
 ```bash
-bun run build:exe -- --target bun-linux-x64 --outfile dist/whiscord-linux
+pnpm run build:exe -- --outfile dist/whiscord-custom
 ```
 
-This uses Bun's `--compile` support under the hood, disables runtime `.env` autoloading on purpose, and keeps `setup` interactive inside the built binary.
+This uses Node.js SEA (`node --build-sea`) under the hood, bundles the app first with `esbuild`, and keeps `setup` interactive inside the built binary.
 
 ## Scripts
 
 ```bash
-bun run setup
-bun run server
-bun run build:exe
-bun run fmt
-bun run lint
-bun run typecheck
+pnpm run setup
+pnpm run server
+pnpm run build:exe
+pnpm run fmt
+pnpm run lint
+pnpm run typecheck
 ```

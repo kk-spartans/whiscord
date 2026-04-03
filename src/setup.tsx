@@ -397,7 +397,7 @@ function SetupScreen({
           <Box flexDirection="column" marginTop={1}>
             <Text>Discord channel: {discordChannelName ?? discordChannelId}</Text>
             <Text>WhatsApp group: {selectedGroup?.name ?? selectedGroupId}</Text>
-            <Text dimColor>Next: `bun run server`</Text>
+            <Text dimColor>Next: `pnpm run server`</Text>
           </Box>
         </Panel>
       ) : null}

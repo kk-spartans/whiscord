@@ -14,7 +14,7 @@ export async function runServer(paths: AppPaths): Promise<void> {
     for (const blocker of config.bridgeBlockers) {
       console.error(blocker);
     }
-    console.error("Run `bun run setup` first.");
+    console.error("Run `pnpm run setup` first.");
     return;
   }
 

@@ -12,20 +12,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 25.9.0
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: bun run fmt:check
+        run: pnpm run fmt:check
 
       - name: Lint
-        run: bun run lint
+        run: pnpm run lint
 
       - name: Typecheck
-        run: bun run typecheck
+        run: pnpm run typecheck
 
   build:
     needs: verify
@@ -34,27 +42,21 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            target: bun-linux-x64
             executable: whiscord
             triple: x86_64-unknown-linux-gnu
-          - os: ubuntu-latest
-            target: bun-linux-arm64
+          - os: ubuntu-24.04-arm
             executable: whiscord
             triple: aarch64-unknown-linux-gnu
           - os: windows-latest
-            target: bun-windows-x64
             executable: whiscord.exe
             triple: x86_64-pc-windows-msvc
           - os: windows-11-arm
-            target: bun-windows-arm64
             executable: whiscord.exe
             triple: aarch64-pc-windows-msvc
-          - os: macos-latest
-            target: bun-darwin-x64
+          - os: macos-15-intel
             executable: whiscord
             triple: x86_64-apple-darwin
           - os: macos-latest
-            target: bun-darwin-arm64
             executable: whiscord
             triple: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
@@ -62,14 +64,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 25.9.0
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build executable
-        run: bun run build:exe -- --target ${{ matrix.target }} --outfile dist/${{ matrix.executable }}
+        run: pnpm run build:exe -- --outfile dist/${{ matrix.executable }}
 
       - name: Package executable zip
         shell: pwsh

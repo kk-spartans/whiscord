@@ -45,7 +45,7 @@ jobs:
             target: bun-windows-x64
             executable: whiscord.exe
             triple: x86_64-pc-windows-msvc
-          - os: windows-latest
+          - os: windows-11-arm
             target: bun-windows-arm64
             executable: whiscord.exe
             triple: aarch64-pc-windows-msvc

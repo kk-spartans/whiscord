@@ -2,8 +2,8 @@
 node_modules
 
 # output
-out
-dist
+out/
+dist/
 *.tgz
 
 # code coverage
@@ -16,11 +16,8 @@ logs
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env*
+!.env.example
 
 # caches
 .eslintcache

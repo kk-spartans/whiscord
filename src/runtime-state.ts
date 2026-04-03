@@ -38,7 +38,6 @@ export type RuntimeSnapshot = {
   whatsapp: {
     status: ServiceStatus;
     user?: string;
-    pairingCode?: string;
     qrTerminal?: string;
     groupJid?: string;
     groupName?: string;

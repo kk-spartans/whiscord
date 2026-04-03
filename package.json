@@ -10,20 +10,24 @@
     "setup": "bun run src/main.ts setup",
     "build:exe": "bun build --compile --minify --bytecode --sourcemap --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/whiscord",
     "lint": "oxlint src",
-    "fmt": "oxfmt --write src README.md package.json tsconfig.json .gitignore .oxlintrc.json .oxfmtrc.json",
-    "fmt:check": "oxfmt --check src README.md package.json tsconfig.json .gitignore .oxlintrc.json .oxfmtrc.json",
+    "fmt": "oxfmt --write",
+    "fmt:check": "oxfmt --check",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@inkjs/ui": "^2.0.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "discord.js": "^14.26.0",
+    "ink": "^6.8.0",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
+    "react": "^19.2.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.14",
     "oxfmt": "^0.43.0",
     "oxlint": "^1.58.0"
   },

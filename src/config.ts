@@ -18,7 +18,6 @@ const configFileSchema = z.object({
   }),
   whatsapp: z.object({
     groupJid: z.string().regex(/@g\.us$/, "must end with @g.us"),
-    pairingPhone: z.string().regex(/^\d+$/, "must be digits only, no leading plus").optional(),
   }),
 });
 
@@ -32,7 +31,6 @@ const partialConfigFileSchema = z.object({
   whatsapp: z
     .object({
       groupJid: z.string().optional(),
-      pairingPhone: z.string().optional(),
     })
     .optional(),
 });
@@ -46,7 +44,6 @@ export type StoredConfigInput = {
   };
   whatsapp: {
     groupJid: string;
-    pairingPhone?: string;
   };
 };
 
@@ -57,7 +54,6 @@ export type PartialStoredConfig = {
   };
   whatsapp?: {
     groupJid?: string;
-    pairingPhone?: string;
   };
 };
 
@@ -77,7 +73,6 @@ export type AppConfig = {
   };
   whatsapp: {
     groupJid?: string;
-    pairingPhone?: string;
   };
   issues: string[];
   bridgeBlockers: string[];
@@ -126,7 +121,6 @@ export async function loadConfig(paths = getAppPaths()): Promise<AppConfig> {
   const discordToken = trim(partial.discord?.token);
   const discordChannelId = trim(partial.discord?.channelId);
   const whatsappGroupJid = trim(partial.whatsapp?.groupJid);
-  const whatsappPairingPhone = trim(partial.whatsapp?.pairingPhone);
 
   const bridgeBlockers = [
     !discordToken && "Discord token is not configured. Run `whiscord setup`.",
@@ -146,7 +140,6 @@ export async function loadConfig(paths = getAppPaths()): Promise<AppConfig> {
     },
     whatsapp: {
       groupJid: whatsappGroupJid,
-      pairingPhone: whatsappPairingPhone,
     },
     issues,
     bridgeBlockers,
@@ -166,7 +159,6 @@ export async function saveConfig(
     },
     whatsapp: {
       groupJid: input.whatsapp.groupJid.trim(),
-      pairingPhone: trim(input.whatsapp.pairingPhone),
     },
   });
 

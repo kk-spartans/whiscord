@@ -22,7 +22,7 @@ The setup wizard asks for:
 
 - Discord bot token
 - Discord channel ID
-- Optional WhatsApp pairing phone number
+- A WhatsApp QR scan in the terminal
 - WhatsApp target group, chosen from your actual joined groups after login
 
 It writes the config to `~/.local/share/whiscord/config.json` and keeps WhatsApp auth in `~/.local/share/whiscord/whatsapp-auth/`.
@@ -35,7 +35,8 @@ bun run server
 
 ## Notes
 
-- The setup wizard shows a QR if you do not provide a pairing phone.
+- The setup wizard always uses a terminal QR for WhatsApp pairing.
+- The setup flow asks which WhatsApp group to bridge, then stores that group JID in config.
 - The Discord bot needs `Guilds`, `Guild Messages`, and `Message Content` intents.
 - Local runtime state lives in `~/.local/share/whiscord`.
 

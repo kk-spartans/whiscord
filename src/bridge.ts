@@ -16,10 +16,10 @@ import {
 } from "@whiskeysockets/baileys";
 import { Client, Events, GatewayIntentBits, type Message, type SendableChannels } from "discord.js";
 import pino from "pino";
-import QRCode from "qrcode";
 
 import type { AppConfig } from "./config";
 import type { EventLevel, RuntimeEvent, RuntimeSnapshot } from "./runtime-state";
+import { renderWhatsAppQr } from "./whatsapp-qr";
 
 type SnapshotListener = (snapshot: RuntimeSnapshot) => void;
 
@@ -145,7 +145,6 @@ export class BridgeService {
   private whatsappSocket: WASocket | null = null;
   private whatsappReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
-  private pairingRequested = false;
 
   constructor(
     private readonly config: AppConfig,
@@ -312,7 +311,6 @@ export class BridgeService {
     });
 
     this.whatsappSocket = socket;
-    this.pairingRequested = false;
 
     socket.ev.on("creds.update", () => {
       void auth.saveCreds();
@@ -356,37 +354,16 @@ export class BridgeService {
     }
 
     if (update.qr) {
-      const qrTerminal = await QRCode.toString(update.qr, {
-        small: true,
-        type: "terminal",
-      });
+      const qrTerminal = await renderWhatsAppQr(update.qr);
 
       this.store.setWhatsApp({ qrTerminal });
       this.store.log("info", "WhatsApp QR updated");
     }
 
-    if (
-      this.config.whatsapp.pairingPhone &&
-      !this.pairingRequested &&
-      !socket.authState.creds.registered &&
-      (update.connection === "connecting" || Boolean(update.qr))
-    ) {
-      this.pairingRequested = true;
-
-      try {
-        const pairingCode = await socket.requestPairingCode(this.config.whatsapp.pairingPhone);
-        this.store.setWhatsApp({ pairingCode, qrTerminal: undefined });
-        this.store.log("info", "WhatsApp pairing code requested");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.store.increment("errors");
-        this.store.log("error", `Failed to request WhatsApp pairing code: ${message}`);
-      }
-    }
-
     if (update.connection === "open") {
       this.store.setWhatsApp({
         status: "connected",
+        qrTerminal: undefined,
         user: this.getWhatsAppAccountLabel(socket.user),
       });
       this.store.log("info", "WhatsApp connected");
